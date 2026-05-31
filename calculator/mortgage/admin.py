@@ -1,18 +1,38 @@
-# Django admin configuration for the mortgage app
-# Enables staff users to view, search, and filter saved mortgage scenarios in the admin panel
-
 from django.contrib import admin
 
-from .models import SavedScenario
+from .models import SavedScenario, LoanSplit
+
+"""
+This file sets up the Django Admin dashboard which controls the following features.
+- Saved Scenario Admin to let admins view saved mortgage scenarios.
+- Loan Split Admin to let admins view and manage loan splits within scenarios.
+- Loan Split Inline as a special view to show loans directly in the scenario.
+"""
+
+class LoanSplitInline(admin.TabularInline):
+    model = LoanSplit
+    extra = 0
+    readonly_fields = ['repayment_amount', 'total_interest', 'total_repayment']
+    fields = [
+        'order', 'loan_amount', 'annual_rate', 'rate_type',
+        'repayment_type', 'repayment_frequency', 'loan_term_years',
+        'fixed_rate_period_years', 'revert_rate', 'offset_amount',
+        'repayment_amount', 'total_interest', 'total_repayment'
+    ]
 
 
 @admin.register(SavedScenario)
 class SavedScenarioAdmin(admin.ModelAdmin):
-    # Display key mortgage parameters and metadata in the list view
-    list_display = ['name', 'user', 'loan_amount', 'annual_rate', 'rate_type', 'repayment_type', 'repayment_frequency', 'created_at']
-    # Allow filtering by scenario characteristics
-    list_filter = ['rate_type', 'repayment_type', 'repayment_frequency']
-    # Allow searching by scenario name or user identifiers
+    list_display = ['name', 'user', 'created_at']
+    list_filter = ['created_at']
     search_fields = ['name', 'user__auth0_id', 'user__email']
-    # Calculated and timestamp fields are read-only; user cannot edit them directly
-    readonly_fields = ['repayment_amount', 'total_interest', 'total_repayment', 'created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at']
+    inlines = [LoanSplitInline]
+
+
+@admin.register(LoanSplit)
+class LoanSplitAdmin(admin.ModelAdmin):
+    list_display = ['scenario', 'order', 'loan_amount', 'annual_rate', 'rate_type', 'repayment_type']
+    list_filter = ['rate_type', 'repayment_type', 'repayment_frequency']
+    search_fields = ['scenario__name', 'scenario__user__email']
+    readonly_fields = ['repayment_amount', 'total_interest', 'total_repayment']

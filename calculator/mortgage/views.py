@@ -4,11 +4,12 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import SavedScenario
+from .models import SavedScenario, LoanSplit
 from .serializers import (
     CalculatorInputSerializer,
     CalculatorResultSerializer,
     SavedScenarioSerializer,
+    LoanSplitSerializer,
 )
 from .services import MortgageCalculatorService
 
@@ -26,13 +27,20 @@ class CalculateView(APIView):
         serializer = CalculatorInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+
         result = MortgageCalculatorService.calculate(
             loan_amount=float(data['loan_amount']),
             annual_rate=float(data['annual_rate']),
+            rate_type=data['rate_type'],
             repayment_type=data['repayment_type'],
             frequency=data['repayment_frequency'],
             loan_term_years=data['loan_term_years'],
+            fixed_rate_period_years=data.get('fixed_rate_period_years'),
+            revert_rate=float(data['revert_rate']) if data.get('revert_rate') else None,
+            offset_amount=float(data.get('offset_amount', 0)),
+            rate_change_step=float(data.get('rate_change_step', 0.25)),
         )
+
         return Response(result, status=status.HTTP_200_OK)
 
 
@@ -41,7 +49,7 @@ class SavedScenarioViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return SavedScenario.objects.filter(user=self.request.user)
+        return SavedScenario.objects.filter(user=self.request.user).prefetch_related('splits')
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
