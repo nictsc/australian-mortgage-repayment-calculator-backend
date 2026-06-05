@@ -100,9 +100,21 @@ CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+#
+# Single source of truth, in precedence order:
+#   1. DATABASE_URL          -> production (Digital Ocean injects this automatically)
+#   2. DB_ENGINE=postgresql  -> explicit local Postgres via DB_* vars
+#   3. SQLite fallback       -> zero-config local dev
+import dj_database_url
 
 DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite3')
-if DB_ENGINE == 'postgresql':
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(default=DATABASE_URL, conn_max_age=600),
+    }
+elif DB_ENGINE == 'postgresql':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
