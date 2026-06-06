@@ -5,6 +5,11 @@ from decimal import Decimal
 This file determines the formula used in the following loan types.
 - Principal and Interest (P/I)
 - Interest Only (I/O)
+
+UNIT CONTRACT: `annual_rate` here is a decimal FRACTION (0.065 = 6.5%), NOT a percent.
+The percent -> fraction conversion (/100) is the caller's responsibility; these classes
+never divide by 100. (The live API path in services.py applies /100 itself and does not
+call these classes.)
 """
 class MortgageCalculator(ABC):
     @abstractmethod

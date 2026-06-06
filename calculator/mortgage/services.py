@@ -125,6 +125,9 @@ class MortgageCalculatorService:
     ):
         effective_loan = loan_amount - offset_amount
         total_periods = loan_term_years * periods_per_year
+        # Unit boundary: annual_rate arrives as a PERCENT (e.g. 6.0). The /100 to a
+        # decimal fraction happens here in the service layer only -- never in the views,
+        # serializers, or the calculators.py strategy classes.
         periodic_rate = (annual_rate / Decimal('100')) / Decimal(periods_per_year)
 
         if repayment_type == 'interest_only':
@@ -327,13 +330,15 @@ class MortgageCalculatorService:
         return {
             'step': float(rate_change_step),
             'minus': {
-                'annual_rate': float(minus_rate),
+                # The rate actually varied: revert_rate for fixed/IO loans, annual_rate for variable.
+                'rate_used': float(minus_rate),
                 'repayment_amount': str(minus_repayment),
                 'total_interest': str(minus_interest),
                 'total_repayment': str(minus_total_repayment),
             },
             'plus': {
-                'annual_rate': float(plus_rate),
+                # The rate actually varied: revert_rate for fixed/IO loans, annual_rate for variable.
+                'rate_used': float(plus_rate),
                 'repayment_amount': str(plus_repayment),
                 'total_interest': str(plus_interest),
                 'total_repayment': str(plus_total_repayment),
