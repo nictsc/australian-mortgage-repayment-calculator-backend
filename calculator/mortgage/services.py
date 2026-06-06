@@ -75,9 +75,12 @@ class MortgageCalculatorService:
                 offset_amount=Decimal('0'),
                 periods_per_year=periods_per_year,
             )
+            total_interest_saved = total_interest_no_offset - total_interest
             offset_savings = {
-                'repayment_saving_per_period': str((total_interest_no_offset - total_interest) / Decimal(total_periods)),
-                'total_interest_saved': str(total_interest_no_offset - total_interest),
+                'repayment_saving_per_period': str(
+                    (total_interest_saved / Decimal(total_periods)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                ),
+                'total_interest_saved': str(total_interest_saved.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)),
             }
 
         rate_sensitivity = cls._calculate_rate_sensitivity(
@@ -140,6 +143,11 @@ class MortgageCalculatorService:
                     ((Decimal('1') + periodic_rate) ** total_periods) - Decimal('1')
                 )
 
+        # Round the quoted repayment to cents first, then amortise from that figure and
+        # derive the totals by summing the schedule rows, so every dollar amount ties out
+        # to the schedule (matching the fixed-rate path's approach).
+        repayment_amount = repayment_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
         schedule, closing_balance = cls._build_schedule(
             effective_loan=effective_loan,
             repayment_amount=repayment_amount,
@@ -148,8 +156,8 @@ class MortgageCalculatorService:
             phase='fixed' if repayment_type == 'interest_only' else None,
         )
 
-        total_repayment = repayment_amount * Decimal(total_periods)
-        total_interest = total_repayment - effective_loan
+        total_interest = sum(Decimal(row['interest']) for row in schedule)
+        total_repayment = sum(Decimal(row['principal']) for row in schedule) + total_interest
 
         return repayment_amount, schedule, total_interest, total_repayment
 
@@ -199,6 +207,11 @@ class MortgageCalculatorService:
                 revert_repayment = loan_amount * revert_periodic_rate * ((Decimal('1') + revert_periodic_rate) ** remaining_periods) / (
                     ((Decimal('1') + revert_periodic_rate) ** remaining_periods) - Decimal('1')
                 )
+
+        # Round both quoted repayments to cents before amortising, so the schedule rows
+        # (and the totals summed from them) tie out to the displayed repayment.
+        fixed_repayment = fixed_repayment.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        revert_repayment = revert_repayment.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
         schedule = []
         closing_balance = loan_amount if repayment_type == 'interest_only' else effective_loan
