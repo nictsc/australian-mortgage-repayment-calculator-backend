@@ -131,31 +131,67 @@ class LoanSplitSerializer(serializers.ModelSerializer):
 
 class SavedScenarioSerializer(serializers.ModelSerializer):
     splits = LoanSplitSerializer(many=True, read_only=True)
+    loan = CalculatorInputSerializer(write_only=True, required=False)
 
     class Meta:
         model = SavedScenario
-        fields = ['id', 'name', 'splits', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'loan', 'splits', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
-    def create(self, validated_data):
-        scenario = super().create(validated_data)
-        loan_data = self.context.get('loan_data')
-        if loan_data:
-            result = MortgageCalculatorService.calculate(**loan_data)
-            LoanSplit.objects.create(
-                scenario=scenario,
-                order=1,
-                loan_amount=loan_data['loan_amount'],
-                annual_rate=loan_data['annual_rate'],
-                rate_type=loan_data['rate_type'],
-                repayment_type=loan_data['repayment_type'],
-                repayment_frequency=loan_data['frequency'],
-                loan_term_years=loan_data['loan_term_years'],
-                fixed_rate_period_years=loan_data.get('fixed_rate_period_years'),
-                revert_rate=loan_data.get('revert_rate'),
-                offset_amount=loan_data.get('offset_amount', 0),
-                repayment_amount=Decimal(result['repayment_amount']),
-                total_interest=Decimal(result['total_interest']),
-                total_repayment=Decimal(result['total_repayment']),
+    def validate(self, data):
+        # Loan details are required when first saving a scenario; on update they're
+        # optional (e.g. a rename), but if supplied they replace the existing split.
+        if self.instance is None and 'loan' not in data:
+            raise serializers.ValidationError(
+                {'loan': 'Loan details are required when creating a scenario.'}
             )
+        return data
+
+    def create(self, validated_data):
+        loan = validated_data.pop('loan', None)
+        scenario = super().create(validated_data)
+        if loan:
+            self._save_split(scenario, loan)
         return scenario
+
+    def update(self, instance, validated_data):
+        loan = validated_data.pop('loan', None)
+        scenario = super().update(instance, validated_data)
+        if loan:
+            scenario.splits.all().delete()
+            self._save_split(scenario, loan)
+        return scenario
+
+    @staticmethod
+    def _save_split(scenario, loan):
+        # Map the validated calculator input onto the service's argument names
+        # (note: the service expects `frequency`, not `repayment_frequency`).
+        loan_data = {
+            'loan_amount': loan['loan_amount'],
+            'annual_rate': loan['annual_rate'],
+            'rate_type': loan['rate_type'],
+            'repayment_type': loan['repayment_type'],
+            'frequency': loan['repayment_frequency'],
+            'loan_term_years': loan['loan_term_years'],
+            'fixed_rate_period_years': loan.get('fixed_rate_period_years'),
+            'revert_rate': loan.get('revert_rate'),
+            'offset_amount': loan.get('offset_amount', Decimal('0.00')),
+            'rate_change_step': loan.get('rate_change_step', Decimal('0.25')),
+        }
+        result = MortgageCalculatorService.calculate(**loan_data)
+        LoanSplit.objects.create(
+            scenario=scenario,
+            order=1,
+            loan_amount=loan_data['loan_amount'],
+            annual_rate=loan_data['annual_rate'],
+            rate_type=loan_data['rate_type'],
+            repayment_type=loan_data['repayment_type'],
+            repayment_frequency=loan_data['frequency'],
+            loan_term_years=loan_data['loan_term_years'],
+            fixed_rate_period_years=loan_data.get('fixed_rate_period_years'),
+            revert_rate=loan_data.get('revert_rate'),
+            offset_amount=loan_data.get('offset_amount', Decimal('0.00')),
+            repayment_amount=Decimal(result['repayment_amount']),
+            total_interest=Decimal(result['total_interest']),
+            total_repayment=Decimal(result['total_repayment']),
+        )
