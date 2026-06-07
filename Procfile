@@ -1,2 +1,2 @@
-web: cd calculator && gunicorn calculator.wsgi --bind 0.0.0.0:$PORT --workers 2
-release: cd calculator && python manage.py migrate
+web: gunicorn --chdir calculator calculator.wsgi --bind 0.0.0.0:$PORT --workers 2
+release: python manage.py migrate --pythonpath calculator --settings calculator.settings
