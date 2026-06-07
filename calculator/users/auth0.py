@@ -57,9 +57,12 @@ class Auth0JWTAuthentication(authentication.BaseAuthentication):
                 issuer=f'https://{settings.AUTH0_DOMAIN}/',
             )
 
+            email = payload.get('email', '')
+            # auth0 sub (e.g. "auth0|abc123") is globally unique — safe as username.
+            username = payload['sub'][:150]
             user, _ = User.objects.get_or_create(
                 auth0_id=payload['sub'],
-                defaults={'email': payload.get('email', '')},
+                defaults={'email': email, 'username': username},
             )
 
             return (user, token)
